@@ -6,19 +6,6 @@
 #include "sensorClass.hpp"
 #include <map>
 
-#include "sensor/sensorBMP280.hpp"
-#include "sensor/sensorBME688.hpp"
-#include "sensor/sensorCO2.hpp"
-#include "sensor/sensorSunlight.hpp"
-#include "sensor/sensorMultiGas.hpp"
-#include "sensor/sensorLight.hpp"
-#include "sensor/sensorFlame.hpp"
-#include "sensor/sensorO2.hpp"
-#include "sensor/sensorUV.hpp"
-#include "sensor/sensorTurbidity.hpp"
-#include "sensor/sensorTDS.hpp"
-#include "sensor/sensorUltrasonic.hpp"
-
 #define SENSOR_BUILDER_DEF_BAUD 9600
 #define SENSOR_BUILDER_DEF_SLAVE 1
 #define SENSOR_BUILDER_DEF_VERSION 0x10010001
@@ -56,18 +43,9 @@ public:
 
 void SensorBuilderClass::check_grove()
 {
-    // Check if an analog type sensor is connected
-    GROVE_SWITCH_ADC;
-    pinMode(SENSOR_ANALOG_PIN, OUTPUT);
-    digitalWrite(SENSOR_ANALOG_PIN, HIGH);
-    delay(10);
-    pinMode(SENSOR_ANALOG_PIN, INPUT);
-    // check i2c sensor
-    _i2c_available = (digitalRead(SENSOR_ANALOG_PIN) == HIGH);
-    if (!_i2c_available)
-    {
-        _i2c_available = (analogRead(SENSOR_ANALOG_PIN) > 100 && analogRead(SENSOR_ANALOG_E_PIN) > 100);
-    }
+    // USE I2C PINS
+    GROVE_SWITCH_IIC;
+    _i2c_available = false;
 }
 
 bool SensorBuilderClass::begin(uint8_t slave, uint32_t baudrate)
