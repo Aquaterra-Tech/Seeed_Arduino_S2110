@@ -8,7 +8,11 @@
 
 #define SENSOR_BUILDER_DEF_BAUD 9600
 #define SENSOR_BUILDER_DEF_SLAVE 1
-#define SENSOR_BUILDER_DEF_VERSION 0x10010001
+#define SENSOR_BUILDER_DEF_MAC_ADDR 0x00000001
+#define SENSOR_BUILDER_MAJOR 1 // max: 31
+#define SENSOR_BUILDER_MINOR 0 // max: 31
+#define SENSOR_BUILDER_BUILD 1 // max: 63
+#define SENSOR_BUILDER_DEF_VERSION (((SENSOR_BUILDER_MAJOR << 11) & 0xF800) | ((SENSOR_BUILDER_MINOR << 6) & 0x7C0) | (SENSOR_BUILDER_BUILD & 0x3F)) // major(5bit) minor(5bit) build(6bit) - 1.0.1
 
 #define SENSOR_BUILDER_DEF_VALUE 0x0000
 
@@ -18,6 +22,7 @@ private:
     /* data */
     uint8_t _slave;
     uint32_t _baudrate;
+    uint32_t _mac_addr;
     uint16_t _regs;
     bool _i2c_available = false;
 
@@ -26,8 +31,8 @@ private:
     enum
     {
         REG_ADDR = 0,
-        REG_BAUD,
-        REG_VERSION,
+        REG_BAUD = 2,
+        REG_VERSION = 3,
     };
 
 public:
@@ -36,23 +41,33 @@ public:
     uint16_t addSensor(sensorClass *sensor);
     // bool removeSensor(sensorClass *sensor);
     void check_grove(void);
-    bool begin(uint8_t slave = SENSOR_BUILDER_DEF_SLAVE, uint32_t baudrate = SENSOR_BUILDER_DEF_BAUD);
+    bool begin(uint8_t slave = SENSOR_BUILDER_DEF_SLAVE, uint32_t mac_addr = SENSOR_BUILDER_DEF_MAC_ADDR, uint32_t baudrate = SENSOR_BUILDER_DEF_BAUD);
     int poll();
     uint16_t size();
 };
 
 void SensorBuilderClass::check_grove()
 {
-    // USE I2C PINS
-    GROVE_SWITCH_IIC;
-    _i2c_available = false;
+    // Check if an analog type sensor is connected
+    GROVE_SWITCH_ADC;
+    pinMode(SENSOR_ANALOG_PIN, OUTPUT);
+    digitalWrite(SENSOR_ANALOG_PIN, HIGH);
+    delay(10);
+    pinMode(SENSOR_ANALOG_PIN, INPUT);
+    // check i2c sensor
+    _i2c_available = (digitalRead(SENSOR_ANALOG_PIN) == HIGH);
+    if (!_i2c_available)
+    {
+        _i2c_available = (analogRead(SENSOR_ANALOG_PIN) > 100 && analogRead(SENSOR_ANALOG_E_PIN) > 100);
+    }
 }
 
-bool SensorBuilderClass::begin(uint8_t slave, uint32_t baudrate)
+bool SensorBuilderClass::begin(uint8_t slave, uint32_t mac_addr, uint32_t baudrate)
 {
 
     _slave = slave;
     _baudrate = baudrate;
+    _mac_addr = mac_addr;
 
     // start the Modbus RTU server, with (slave) id 1
     RS485.setDelays(5000, 5000);
@@ -72,16 +87,16 @@ bool SensorBuilderClass::begin(uint8_t slave, uint32_t baudrate)
     ModbusRTUServer.configureInputRegisters(0x00, _regs);
     ModbusRTUServer.configureHoldingRegisters(0x00, _regs);
 
-    ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_ADDR, _slave);
-    ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_ADDR, _slave);
+    ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_ADDR, (uint16_t)(_mac_addr >> 16));
+    ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_ADDR + 1, (uint16_t)(_mac_addr & 0x0000FFFF));
+    ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_ADDR, (uint16_t)(_mac_addr >> 16));
+    ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_ADDR + 1, (uint16_t)(_mac_addr & 0x0000FFFF));
 
     ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_BAUD, _baudrate / 100);
     ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_BAUD, _baudrate / 100);
 
-    ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_VERSION, (uint16_t)(SENSOR_BUILDER_DEF_VERSION >> 16));
-    ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_VERSION + 1, (uint16_t)(SENSOR_BUILDER_DEF_VERSION & 0x0000FFFF));
-    ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_VERSION, (uint16_t)(SENSOR_BUILDER_DEF_VERSION >> 16));
-    ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_VERSION + 1, (uint16_t)(SENSOR_BUILDER_DEF_VERSION & 0x0000FFFF));
+    ModbusRTUServer.inputRegisterWrite(SensorBuilderClass::REG_VERSION, SENSOR_BUILDER_DEF_VERSION);
+    ModbusRTUServer.holdingRegisterWrite(SensorBuilderClass::REG_VERSION, SENSOR_BUILDER_DEF_VERSION);
 
     /* skip head information */
     for (uint16_t i = 4; i < _regs; i += 1)
